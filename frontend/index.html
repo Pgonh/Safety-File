@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Safety File</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="brand">Safety File</div>
+    <div class="nav-right">
+      <span id="userInfo" class="hidden"></span>
+      <button id="logoutBtn" class="btn danger hidden">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section id="authSection" class="card auth-card">
+      <div class="tabs">
+        <button id="showLogin" class="tab active">Đăng nhập</button>
+        <button id="showRegister" class="tab">Đăng ký</button>
+      </div>
+
+      <form id="loginForm" class="form">
+        <h2>Đăng nhập</h2>
+        <input id="loginEmail" type="email" placeholder="Email" required />
+        <input id="loginPassword" type="password" placeholder="Mật khẩu" required />
+        <button type="submit" class="btn primary">Đăng nhập</button>
+      </form>
+
+      <form id="registerForm" class="form hidden">
+        <h2>Đăng ký</h2>
+        <input id="registerFullName" type="text" placeholder="Họ và tên" required />
+        <input id="registerEmail" type="email" placeholder="Email" required />
+        <input id="registerPassword" type="password" placeholder="Mật khẩu" required />
+        <input id="registerConfirmPassword" type="password" placeholder="Nhập lại mật khẩu" required />
+        <button type="submit" class="btn primary">Đăng ký</button>
+      </form>
+
+      <div id="authMessage" class="message"></div>
+    </section>
+
+    <section id="dashboardSection" class="hidden dashboard">
+      <div class="card">
+        <h2>Tải file lên</h2>
+        <form id="uploadForm" class="form">
+          abel class="dropzone" for="fileInput">
+            <span>Chọn file hoặc kéo thả vào đây</span>
+            <input id="fileInput" type="file" />
+          </label>
+          <input id="uploadPassword" type="password" placeholder="Mật khẩu mã hóa file" required />
+          <button type="submit" class="btn success">Tải lên</button>
+        </form>
+        <div id="uploadMessage" class="message"></div>
+      </div>
+
+      <div class="card">
+        <div class="files-header">
+          <h2>Danh sách file</h2>
+          <button id="refreshFilesBtn" class="btn secondary">Làm mới</button>
+        </div>
+        <div id="filesList" class="files-list">
+          <p>Chưa có dữ liệu.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./script.js"></script>
+</body>
+</html>

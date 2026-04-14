@@ -6,6 +6,7 @@ const JWT_SECRET = "safety-file-secret-key-2026";
 
 const authController = {
   // Đăng ký tài khoản
+
   register: async (req, res) => {
     try {
       const { email, password, fullName } = req.body;
