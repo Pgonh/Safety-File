@@ -60,6 +60,7 @@ showRegisterBtn.addEventListener("click", () => setAuthView("register"));
 logoutBtn.addEventListener("click", () => {
   showAuth();
   filesList.innerHTML = "<p>Chưa có dữ liệu.</p>";
+  uploadMessage.textContent = "";
 });
 
 registerForm.addEventListener("submit", async (e) => {
@@ -74,6 +75,7 @@ registerForm.addEventListener("submit", async (e) => {
 
   if (password !== confirmPassword) {
     authMessage.textContent = "Mật khẩu nhập lại không khớp.";
+    authMessage.style.color = "red";
     return;
   }
 
@@ -84,13 +86,19 @@ registerForm.addEventListener("submit", async (e) => {
       body: JSON.stringify({ fullName, email, password }),
     });
     const data = await res.json();
-    authMessage.textContent = data.message || "Đăng ký xong.";
-    if (data.success) {
+
+    if (res.ok && data.success) {
+      authMessage.textContent = "Đăng ký thành công! Vui lòng đăng nhập.";
+      authMessage.style.color = "green";
       registerForm.reset();
       setAuthView("login");
+    } else {
+      authMessage.textContent = data.message || "Đăng ký thất bại.";
+      authMessage.style.color = "red";
     }
   } catch (err) {
     authMessage.textContent = "Không gọi được API đăng ký.";
+    authMessage.style.color = "red";
   }
 });
 
@@ -108,18 +116,19 @@ loginForm.addEventListener("submit", async (e) => {
     });
     const data = await res.json();
 
-    if (!data.success) {
+    if (res.ok && data.success) {
+      authToken = data.data.token;
+      currentUser = data.data.user;
+      loginForm.reset();
+      showDashboard();
+      loadFiles();
+    } else {
       authMessage.textContent = data.message || "Đăng nhập thất bại.";
-      return;
+      authMessage.style.color = "red";
     }
-
-    authToken = data.data.token;
-    currentUser = data.data.user;
-    loginForm.reset();
-    showDashboard();
-    loadFiles();
   } catch (err) {
     authMessage.textContent = "Không gọi được API đăng nhập.";
+    authMessage.style.color = "red";
   }
 });
 
@@ -132,12 +141,16 @@ document.getElementById("uploadForm").addEventListener("submit", async (e) => {
 
   if (!file) {
     uploadMessage.textContent = "Bạn chưa chọn file.";
+    uploadMessage.style.color = "red";
     return;
   }
 
   const formData = new FormData();
   formData.append("file", file);
   formData.append("password", password);
+
+  uploadMessage.textContent = "Đang tải lên...";
+  uploadMessage.style.color = "blue";
 
   try {
     const res = await fetch(`${API_BASE}/files/upload`, {
@@ -149,13 +162,19 @@ document.getElementById("uploadForm").addEventListener("submit", async (e) => {
     });
 
     const data = await res.json();
-    uploadMessage.textContent = data.message || "Đã upload.";
-    if (data.success) {
+
+    if (res.ok && data.success) {
+      uploadMessage.textContent = data.message || "Đã upload thành công.";
+      uploadMessage.style.color = "green";
       document.getElementById("uploadForm").reset();
       loadFiles();
+    } else {
+      uploadMessage.textContent = data.message || "Upload thất bại.";
+      uploadMessage.style.color = "red";
     }
   } catch (err) {
-    uploadMessage.textContent = "Upload thất bại.";
+    uploadMessage.textContent = "Lỗi kết nối khi upload.";
+    uploadMessage.style.color = "red";
   }
 });
 
@@ -170,7 +189,12 @@ async function loadFiles() {
 
     const data = await res.json();
 
-    if (!data.success || !data.data.files.length) {
+    if (
+      !res.ok ||
+      !data.success ||
+      !data.data.files ||
+      !data.data.files.length
+    ) {
       filesList.innerHTML = "<p>Chưa có file nào.</p>";
       return;
     }
@@ -180,10 +204,10 @@ async function loadFiles() {
         (file) => `
       <div class="file-item">
         <div class="file-meta">
-          <div class="file-name">${file.fileName}</div>
-          <div class="file-size">${file.fileType || ""} - ${(file.fileSize / 1024).toFixed(2)} KB</div>
+          <div class="file-name">${file.originalFileName || file.fileName}</div>
+          <div class="file-size">${file.fileType || "Unknown"} - ${(file.fileSize / 1024).toFixed(2)} KB</div>
         </div>
-        <button class="btn primary" onclick="downloadFile(${file.fileId}, '${file.fileName}')">Tải xuống</button>
+        <button class="btn primary" onclick="downloadFile(${file.fileId}, '${(file.originalFileName || file.fileName).replace(/'/g, "\\'")}')">Tải xuống</button>
       </div>
     `,
       )
@@ -211,7 +235,7 @@ async function downloadFile(fileId, fileName) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.message || "Download thất bại");
+      alert(err.message || "Download thất bại. Kiểm tra lại mật khẩu.");
       return;
     }
 
@@ -220,11 +244,14 @@ async function downloadFile(fileId, fileName) {
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
+    document.body.appendChild(a); // Đảm bảo hoạt động trên mọi trình duyệt
     a.click();
+    document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   } catch (err) {
-    alert("Không tải được file.");
+    alert("Không tải được file do lỗi kết nối.");
   }
 }
 
+// Khởi tạo giao diện ban đầu
 setAuthView("login");

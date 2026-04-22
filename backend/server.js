@@ -38,6 +38,16 @@ app.get("/test", (req, res) =>
   res.json({ message: "Safety File API hoạt động!" }),
 );
 
+// Middleware xử lý lỗi toàn cục
+app.use((err, req, res, next) => {
+  console.error("🔥 Lỗi Backend:", err.stack);
+  res.status(500).json({
+    success: false,
+    message: "Đã xảy ra lỗi trên server",
+    error: err.message,
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server chạy tại http://localhost:${PORT}`);
