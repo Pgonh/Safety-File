@@ -1,44 +1,79 @@
-// Tạm để lưu file metadata (sau này sẽ dùng MySQL)
-const files = {};
-let fileIdCounter = 1;
+const db = require("../config/database");
 
 const fileRepo = {
-  // Tạo file metadata mới
-  create: async (fileData) => {
-    const fileId = fileIdCounter++;
-    files[fileId] = {
-      fileId,
-      ownerId: fileData.ownerId,
-      originalFileName: fileData.originalFileName,
-      fileType: fileData.fileType,
-      fileSize: fileData.fileSize,
-      encryptedHash: fileData.encryptedHash,
-      iv: fileData.iv,
-      authTag: fileData.authTag,
-      replicas: fileData.replicas,
-      uploadTime: new Date(),
-      isDeleted: false,
-    };
-    return files[fileId];
+  create: (fileData) => {
+    return new Promise((resolve, reject) => {
+      const {
+        ownerId,
+        originalFileName,
+        fileType,
+        fileSize,
+        encryptedHash,
+        iv,
+        authTag,
+        salt,
+        replicas,
+      } = fileData;
+      const sql = `INSERT INTO files (ownerId, originalFileName, fileType, fileSize, encryptedHash, iv, authTag, salt, replicas) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+      // Chuyển mảng replicas thành chuỗi JSON để lưu vào SQLite
+      const replicasStr = JSON.stringify(replicas);
+
+      db.run(
+        sql,
+        [
+          ownerId,
+          originalFileName,
+          fileType,
+          fileSize,
+          encryptedHash,
+          iv,
+          authTag,
+          salt,
+          replicasStr,
+        ],
+        function (err) {
+          if (err) reject(err);
+          else resolve({ fileId: this.lastID, ...fileData });
+        },
+      );
+    });
   },
 
-  // Tìm file theo ID
-  findById: async (fileId) => {
-    return files[fileId];
+  findById: (fileId) => {
+    return new Promise((resolve, reject) => {
+      db.get(
+        "SELECT * FROM files WHERE fileId = ? AND isDeleted = 0",
+        [fileId],
+        (err, row) => {
+          if (err) reject(err);
+          else if (row) {
+            row.replicas = JSON.parse(row.replicas); // Chuyển ngược lại thành mảng
+            resolve(row);
+          } else resolve(null);
+        },
+      );
+    });
   },
 
-  // Lấy danh sách file của user
-  findByOwnerId: async (ownerId) => {
-    return Object.values(files).filter(
-      (f) => f.ownerId === ownerId && !f.isDeleted,
-    );
-  },
-
-  // Xóa logic file
-  delete: async (fileId) => {
-    if (files[fileId]) {
-      files[fileId].isDeleted = true;
-    }
+  findByOwnerId: (ownerId) => {
+    return new Promise((resolve, reject) => {
+      db.all(
+        "SELECT * FROM files WHERE ownerId = ? AND isDeleted = 0 ORDER BY uploadTime DESC",
+        [ownerId],
+        (err, rows) => {
+          if (err) reject(err);
+          else {
+            const formatted = rows.map((r) => ({
+              ...r,
+              replicas: JSON.parse(r.replicas),
+            }));
+            resolve(formatted);
+          }
+        },
+      );
+    });
   },
 };
 

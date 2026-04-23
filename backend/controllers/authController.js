@@ -1,101 +1,60 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const userRepo = require("../repositories/userRepo");
-
+const auditRepo = require("../repositories/auditRepo");
 const JWT_SECRET = "safety-file-secret-key-2026";
 
 const authController = {
-  // Đăng ký tài khoản
-
   register: async (req, res) => {
     try {
       const { email, password, fullName } = req.body;
-
-      // Kiểm tra input
       if (!email || !password || !fullName) {
-        return res.status(400).json({
-          success: false,
-          message: "Email, password, fullName không được để trống",
-        });
+        return res
+          .status(400)
+          .json({ success: false, message: "Thiếu thông tin!" });
       }
 
-      // Kiểm tra email đã tồn tại
-      const existingUser = await userRepo.findByEmail(email);
+      const existingUser = await userRepo.findByEmail(email); // Thêm await
       if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: "Email đã được đăng ký",
-        });
+        return res
+          .status(400)
+          .json({ success: false, message: "Email đã tồn tại" });
       }
 
-      // Hash mật khẩu
       const passwordHash = await bcrypt.hash(password, 10);
+      const newUser = await userRepo.create({ email, passwordHash, fullName }); // Thêm await
 
-      // Tạo user mới
-      const newUser = await userRepo.create({
-        email,
-        passwordHash,
-        fullName,
-      });
+      // Ghi log đăng ký
+      await auditRepo.record(newUser.userId, "REGISTER", "Đăng ký tài khoản");
 
-      return res.status(201).json({
-        success: true,
-        message: "Đăng ký thành công",
-        data: {
-          userId: newUser.userId,
-          email: newUser.email,
-          fullName: newUser.fullName,
-        },
-      });
+      return res
+        .status(201)
+        .json({ success: true, message: "Đăng ký thành công", data: newUser });
     } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: "Lỗi server: " + error.message,
-      });
+      res.status(500).json({ success: false, message: error.message });
     }
   },
 
-  // Đăng nhập
   login: async (req, res) => {
     try {
       const { email, password } = req.body;
+      const user = await userRepo.findByEmail(email); // Thêm await
 
-      // Kiểm tra input
-      if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: "Email và password không được để trống",
-        });
+      if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Sai tài khoản hoặc mật khẩu" });
       }
 
-      // Tìm user theo email
-      const user = await userRepo.findByEmail(email);
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Email hoặc mật khẩu không đúng",
-        });
-      }
-
-      // So sánh mật khẩu
-      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-      if (!isPasswordValid) {
-        return res.status(401).json({
-          success: false,
-          message: "Email hoặc mật khẩu không đúng",
-        });
-      }
-
-      // Sinh JWT token
       const token = jwt.sign(
         { userId: user.userId, email: user.email },
         JWT_SECRET,
         { expiresIn: "24h" },
       );
-
+      // Ghi log đăng nhập
+      await auditRepo.record(user.userId, "LOGIN", "Đăng nhập thành công");
       return res.status(200).json({
         success: true,
-        message: "Đăng nhập thành công",
         data: {
           token,
           user: {
@@ -106,10 +65,7 @@ const authController = {
         },
       });
     } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: "Lỗi server: " + error.message,
-      });
+      res.status(500).json({ success: false, message: error.message });
     }
   },
 };

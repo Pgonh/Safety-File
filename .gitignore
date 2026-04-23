@@ -4,3 +4,21 @@ node_modules/
 npm-debug.log
 .DS_Store
 Thumbs.db
+
+# Bỏ qua file database SQLite
+backend/data/safety_file.db
+
+# Bỏ qua tất cả các file mã hóa trong các node lưu trữ
+backend/storage/node*/**/*.enc
+backend/storage/node*/**/*.evc
+
+# Bỏ qua các thư viện cài đặt (rất quan trọng)
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Bỏ qua các file môi trường nhạy cảm
+.env
+
+# Bỏ qua các file cấu hình riêng của VS Code
+.vscode/

@@ -1,29 +1,24 @@
-// Tạm để lưu user (sau này sẽ dùng MySQL)
-const users = {};
-let userIdCounter = 1;
+const db = require("../config/database");
 
 const userRepo = {
-  // Tìm user theo email
-  findByEmail: async (email) => {
-    return Object.values(users).find((u) => u.email === email);
+  findByEmail: (email) => {
+    return new Promise((resolve, reject) => {
+      db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
   },
 
-  // Tìm user theo ID
-  findById: async (userId) => {
-    return users[userId];
-  },
-
-  // Tạo user mới
-  create: async (userData) => {
-    const userId = userIdCounter++;
-    users[userId] = {
-      userId,
-      email: userData.email,
-      passwordHash: userData.passwordHash,
-      fullName: userData.fullName,
-      createdAt: new Date(),
-    };
-    return users[userId];
+  create: (userData) => {
+    return new Promise((resolve, reject) => {
+      const { email, passwordHash, fullName } = userData;
+      const sql = `INSERT INTO users (email, passwordHash, fullName) VALUES (?, ?, ?)`;
+      db.run(sql, [email, passwordHash, fullName], function (err) {
+        if (err) reject(err);
+        else resolve({ userId: this.lastID, ...userData });
+      });
+    });
   },
 };
 

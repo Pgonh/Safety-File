@@ -4,6 +4,7 @@ const multer = require("multer");
 const authController = require("./controllers/authController");
 const fileController = require("./controllers/fileController");
 const authMiddleware = require("./middleware/auth");
+const auditRepo = require("./repositories/auditRepo");
 
 const app = express();
 
@@ -48,6 +49,15 @@ app.use((err, req, res, next) => {
   });
 });
 
+app.get("/audit-logs", authMiddleware.verifyJWT, async (req, res) => {
+  try {
+    const logs = await auditRepo.getByUserId(req.user.userId);
+    res.json({ success: true, data: logs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server chạy tại http://localhost:${PORT}`);
@@ -57,4 +67,5 @@ app.listen(PORT, () => {
   console.log(`   POST /files/upload - Tải lên file (cần JWT)`);
   console.log(`   GET /files - Danh sách file (cần JWT)`);
   console.log(`   POST /files/:id/download - Tải xuống file (cần JWT)`);
+  console.log(`   GET /audit-logs - Xem nhật ký hoạt động (cần JWT)`);
 });

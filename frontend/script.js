@@ -1,24 +1,28 @@
 const API_BASE = "http://localhost:3000";
 
-let authToken = "";
-let currentUser = null;
+let authToken = localStorage.getItem("authToken") || "";
+let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
 
+// Khai báo các Element
 const authSection = document.getElementById("authSection");
 const dashboardSection = document.getElementById("dashboardSection");
-
 const showLoginBtn = document.getElementById("showLogin");
 const showRegisterBtn = document.getElementById("showRegister");
-
 const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
-
 const authMessage = document.getElementById("authMessage");
 const uploadMessage = document.getElementById("uploadMessage");
 const filesList = document.getElementById("filesList");
-
 const userInfo = document.getElementById("userInfo");
 const logoutBtn = document.getElementById("logoutBtn");
 const refreshFilesBtn = document.getElementById("refreshFilesBtn");
+const passwordModal = document.getElementById("passwordModal");
+const modalPasswordInput = document.getElementById("modalPasswordInput");
+const confirmModalBtn = document.getElementById("confirmModalBtn");
+const cancelModalBtn = document.getElementById("cancelModalBtn");
+const logsList = document.getElementById("logsList");
+
+// --- CÁC HÀM XỬ LÝ GIAO DIỆN ---
 
 function setAuthView(mode) {
   if (mode === "login") {
@@ -40,9 +44,14 @@ function showDashboard() {
   dashboardSection.classList.remove("hidden");
   userInfo.classList.remove("hidden");
   logoutBtn.classList.remove("hidden");
+
   userInfo.textContent = currentUser
     ? `Xin chào, ${currentUser.fullName}`
     : "Đã đăng nhập";
+
+  // Tải dữ liệu ngay lập tức khi vào Dashboard
+  loadFiles();
+  loadAuditLogs();
 }
 
 function showAuth() {
@@ -54,57 +63,97 @@ function showAuth() {
   currentUser = null;
 }
 
-showLoginBtn.addEventListener("click", () => setAuthView("login"));
-showRegisterBtn.addEventListener("click", () => setAuthView("register"));
+// --- CÁC HÀM API ---
 
-logoutBtn.addEventListener("click", () => {
-  showAuth();
-  filesList.innerHTML = "<p>Chưa có dữ liệu.</p>";
-  uploadMessage.textContent = "";
-});
-
-registerForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const fullName = document.getElementById("registerFullName").value.trim();
-  const email = document.getElementById("registerEmail").value.trim();
-  const password = document.getElementById("registerPassword").value;
-  const confirmPassword = document.getElementById(
-    "registerConfirmPassword",
-  ).value;
-
-  if (password !== confirmPassword) {
-    authMessage.textContent = "Mật khẩu nhập lại không khớp.";
-    authMessage.style.color = "red";
-    return;
-  }
-
+async function loadFiles() {
+  if (!authToken) return;
   try {
-    const res = await fetch(`${API_BASE}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName, email, password }),
+    const res = await fetch(`${API_BASE}/files`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
     const data = await res.json();
+    if (!res.ok || !data.success || !data.data.files.length) {
+      filesList.innerHTML = "<p>Chưa có file nào.</p>";
+      return;
+    }
+    filesList.innerHTML = data.data.files
+      .map(
+        (file) => `
+            <div class="file-item">
+                <div class="file-meta">
+                    <div class="file-name">${file.originalFileName || file.fileName}</div>
+                    <div class="file-size">${file.fileType || "N/A"} - ${(file.fileSize / 1024).toFixed(2)} KB</div>
+                </div>
+                <button class="btn primary" onclick="downloadFile(${file.fileId}, '${(file.originalFileName || file.fileName).replace(/'/g, "\\'")}')">Tải xuống</button>
+            </div>
+        `,
+      )
+      .join("");
+  } catch (err) {
+    filesList.innerHTML = "<p>Lỗi kết nối danh sách file.</p>";
+  }
+}
 
-    if (res.ok && data.success) {
-      authMessage.textContent = "Đăng ký thành công! Vui lòng đăng nhập.";
-      authMessage.style.color = "green";
-      registerForm.reset();
-      setAuthView("login");
-    } else {
-      authMessage.textContent = data.message || "Đăng ký thất bại.";
-      authMessage.style.color = "red";
+async function loadAuditLogs() {
+  if (!authToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/audit-logs`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    const data = await res.json();
+    if (data.success) {
+      logsList.innerHTML = data.data
+        .map(
+          (log) => `
+                <div class="log-item">
+                    <span class="log-time">${new Date(log.timestamp).toLocaleString("vi-VN")}</span>
+                    <span class="log-action action-${log.action}">${log.action}</span>
+                    <span class="log-details">${log.details}</span>
+                </div>
+            `,
+        )
+        .join("");
     }
   } catch (err) {
-    authMessage.textContent = "Không gọi được API đăng ký.";
-    authMessage.style.color = "red";
+    logsList.innerHTML = "<p>Không thể tải nhật ký.</p>";
   }
-});
+}
+
+// --- XỬ LÝ MODAL MẬT KHẨU ---
+
+function requestPasswordFromModal() {
+  return new Promise((resolve) => {
+    passwordModal.classList.remove("hidden");
+    modalPasswordInput.value = "";
+    modalPasswordInput.focus();
+
+    const onConfirm = () => {
+      const pass = modalPasswordInput.value;
+      if (!pass) return alert("Vui lòng nhập mật khẩu!");
+      cleanup();
+      resolve(pass);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    const cleanup = () => {
+      passwordModal.classList.add("hidden");
+      confirmModalBtn.removeEventListener("click", onConfirm);
+      cancelModalBtn.removeEventListener("click", onCancel);
+    };
+
+    confirmModalBtn.addEventListener("click", onConfirm);
+    cancelModalBtn.addEventListener("click", onCancel);
+  });
+}
+
+// --- XỬ LÝ SỰ KIỆN ---
 
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const email = document.getElementById("loginEmail").value.trim();
   const password = document.getElementById("loginPassword").value;
 
@@ -119,108 +168,90 @@ loginForm.addEventListener("submit", async (e) => {
     if (res.ok && data.success) {
       authToken = data.data.token;
       currentUser = data.data.user;
+      localStorage.setItem("authToken", authToken);
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
       loginForm.reset();
       showDashboard();
-      loadFiles();
     } else {
-      authMessage.textContent = data.message || "Đăng nhập thất bại.";
+      authMessage.textContent = data.message || "Sai thông tin đăng nhập.";
       authMessage.style.color = "red";
     }
   } catch (err) {
-    authMessage.textContent = "Không gọi được API đăng nhập.";
+    authMessage.textContent = "Lỗi kết nối server.";
+  }
+});
+
+registerForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fullName = document.getElementById("registerFullName").value.trim();
+  const email = document.getElementById("registerEmail").value.trim();
+  const password = document.getElementById("registerPassword").value;
+  const confirm = document.getElementById("registerConfirmPassword").value;
+
+  if (password !== confirm) {
+    authMessage.textContent = "Mật khẩu không khớp.";
     authMessage.style.color = "red";
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fullName, email, password }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      authMessage.textContent = "Đăng ký xong! Mời đăng nhập.";
+      authMessage.style.color = "green";
+      registerForm.reset();
+      setAuthView("login");
+    } else {
+      authMessage.textContent = data.message;
+      authMessage.style.color = "red";
+    }
+  } catch (err) {
+    authMessage.textContent = "Lỗi đăng ký.";
   }
 });
 
 document.getElementById("uploadForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const fileInput = document.getElementById("fileInput");
   const password = document.getElementById("uploadPassword").value;
   const file = fileInput.files[0];
 
-  if (!file) {
-    uploadMessage.textContent = "Bạn chưa chọn file.";
-    uploadMessage.style.color = "red";
-    return;
-  }
+  if (!file) return alert("Chưa chọn file!");
 
   const formData = new FormData();
   formData.append("file", file);
   formData.append("password", password);
 
-  uploadMessage.textContent = "Đang tải lên...";
+  uploadMessage.textContent = "Đang mã hóa và tải lên...";
   uploadMessage.style.color = "blue";
 
   try {
     const res = await fetch(`${API_BASE}/files/upload`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+      headers: { Authorization: `Bearer ${authToken}` },
       body: formData,
     });
-
     const data = await res.json();
-
-    if (res.ok && data.success) {
-      uploadMessage.textContent = data.message || "Đã upload thành công.";
+    if (res.ok) {
+      uploadMessage.textContent = "Thành công!";
       uploadMessage.style.color = "green";
       document.getElementById("uploadForm").reset();
       loadFiles();
-    } else {
-      uploadMessage.textContent = data.message || "Upload thất bại.";
-      uploadMessage.style.color = "red";
+      loadAuditLogs();
     }
   } catch (err) {
-    uploadMessage.textContent = "Lỗi kết nối khi upload.";
-    uploadMessage.style.color = "red";
+    uploadMessage.textContent = "Lỗi upload.";
   }
 });
 
-async function loadFiles() {
-  try {
-    const res = await fetch(`${API_BASE}/files`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    const data = await res.json();
-
-    if (
-      !res.ok ||
-      !data.success ||
-      !data.data.files ||
-      !data.data.files.length
-    ) {
-      filesList.innerHTML = "<p>Chưa có file nào.</p>";
-      return;
-    }
-
-    filesList.innerHTML = data.data.files
-      .map(
-        (file) => `
-      <div class="file-item">
-        <div class="file-meta">
-          <div class="file-name">${file.originalFileName || file.fileName}</div>
-          <div class="file-size">${file.fileType || "Unknown"} - ${(file.fileSize / 1024).toFixed(2)} KB</div>
-        </div>
-        <button class="btn primary" onclick="downloadFile(${file.fileId}, '${(file.originalFileName || file.fileName).replace(/'/g, "\\'")}')">Tải xuống</button>
-      </div>
-    `,
-      )
-      .join("");
-  } catch (err) {
-    filesList.innerHTML = "<p>Lỗi tải danh sách file.</p>";
-  }
-}
-
-refreshFilesBtn.addEventListener("click", loadFiles);
-
 async function downloadFile(fileId, fileName) {
-  const password = prompt("Nhập mật khẩu giải mã file:");
+  const password = await requestPasswordFromModal();
   if (!password) return;
 
   try {
@@ -235,7 +266,8 @@ async function downloadFile(fileId, fileName) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.message || "Download thất bại. Kiểm tra lại mật khẩu.");
+      alert(err.message || "Sai mật khẩu!");
+      loadAuditLogs();
       return;
     }
 
@@ -244,14 +276,35 @@ async function downloadFile(fileId, fileName) {
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
-    document.body.appendChild(a); // Đảm bảo hoạt động trên mọi trình duyệt
     a.click();
-    document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+    loadAuditLogs();
   } catch (err) {
-    alert("Không tải được file do lỗi kết nối.");
+    alert("Lỗi tải file.");
   }
 }
 
-// Khởi tạo giao diện ban đầu
-setAuthView("login");
+// Gán sự kiện cho các nút chuyển đổi và logout
+showLoginBtn.onclick = () => setAuthView("login");
+showRegisterBtn.onclick = () => setAuthView("register");
+logoutBtn.onclick = () => {
+  localStorage.clear();
+  location.reload(); // Cách sạch nhất để logout
+};
+if (refreshFilesBtn) {
+  refreshFilesBtn.onclick = () => {
+    loadFiles();
+    loadAuditLogs();
+  };
+}
+
+// KHỞI TẠO APP
+function init() {
+  if (authToken && currentUser) {
+    showDashboard();
+  } else {
+    setAuthView("login");
+  }
+}
+
+init();

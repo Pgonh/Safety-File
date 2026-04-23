@@ -45,7 +45,7 @@
       <div class="card">
         <h2>Tải file lên</h2>
         <form id="uploadForm" class="form">
-          abel class="dropzone" for="fileInput">
+          <abel class="dropzone" for="fileInput">
             <span>Chọn file hoặc kéo thả vào đây</span>
             <input id="fileInput" type="file" />
           </label>
@@ -58,12 +58,31 @@
       <div class="card">
         <div class="files-header">
           <h2>Danh sách file</h2>
-          <button id="refreshFilesBtn" class="btn secondary">Làm mới</button>
         </div>
         <div id="filesList" class="files-list">
           <p>Chưa có dữ liệu.</p>
         </div>
       </div>
+      <div class="card mt-24">
+    <div class="files-header">
+        <h2>Nhật ký hoạt động</h2>
+    </div>
+    <div id="logsList" class="logs-container">
+        <p class="text-center">Đang tải nhật ký...</p>
+    </div>
+</div>
+
+<div id="passwordModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3>🔑 Xác thực giải mã</h3>
+        <p>Vui lòng nhập mật khẩu để giải mã tệp tin này.</p>
+        <input id="modalPasswordInput" type="password" placeholder="Nhập mật khẩu tại đây..." />
+        <div class="modal-actions">
+            <button id="cancelModalBtn" class="btn secondary">Hủy</button>
+            <button id="confirmModalBtn" class="btn primary">Xác nhận</button>
+        </div>
+    </div>
+</div>
     </section>
   </main>
 

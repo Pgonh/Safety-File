@@ -1,190 +1,126 @@
 const crypto = require("crypto");
 const fileRepo = require("../repositories/fileRepo");
-const userRepo = require("../repositories/userRepo");
 const cryptoService = require("../services/cryptoService");
 const storageService = require("../services/storageService");
-
+const auditRepo = require("../repositories/auditRepo");
 const fileController = {
-  // Upload file
   upload: async (req, res) => {
     try {
       const userId = req.user.userId;
-
-      // Kiểm tra file
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: "Vui lòng chọn file để upload",
-        });
-      }
-
       const { password } = req.body;
-      if (!password) {
-        return res.status(400).json({
-          success: false,
-          message: "Vui lòng nhập mật khẩu để mã hóa file",
-        });
-      }
+      const { buffer, originalname, mimetype, size } = req.file;
 
-      const fileBuffer = req.file.buffer;
-      const fileName = req.file.originalname;
-      const fileType = req.file.mimetype;
-      const fileSize = req.file.size;
-
-      // Kiểm tra dung lượng file (max 500MB)
-      if (fileSize > 500 * 1024 * 1024) {
-        return res.status(400).json({
-          success: false,
-          message: "File vượt quá giới hạn 500MB",
-        });
-      }
-
-      // Sinh salt ngẫu nhiên
-      const salt = crypto.randomBytes(16).toString("hex");
-
-      // Derive key từ password + salt
+      const salt = crypto.randomBytes(16).toString("hex"); // Tạo salt ngẫu nhiên dạng hex
       const key = await cryptoService.deriveKey(password, salt);
-
-      // Mã hóa file
       const { cipherBuffer, iv, authTag } = cryptoService.encryptFile(
-        fileBuffer,
+        buffer,
         key,
       );
 
-      // Tính hash của file đã mã hóa
-      const encryptedHash = crypto
-        .createHash("sha256")
-        .update(cipherBuffer)
-        .digest("hex");
-
-      // Lưu file mã hóa lên các node
+      // 1. Lưu file vật lý vào các node
+      const fileIdTemp = Date.now(); // Tạo ID tạm để đặt tên file .enc
       const replicas = await storageService.saveEncryptedFile(
         cipherBuffer,
-        Date.now(),
+        fileIdTemp,
       );
 
-      // Lưu metadata file
-      const fileData = await fileRepo.create({
+      // 2. Lưu Metadata vào SQLite
+      const newFile = await fileRepo.create({
         ownerId: userId,
-        originalFileName: fileName,
-        fileType: fileType,
-        fileSize: fileSize,
-        encryptedHash: encryptedHash,
+        originalFileName: originalname,
+        fileType: mimetype,
+        fileSize: size,
+        encryptedHash: fileIdTemp.toString(),
         iv: iv.toString("hex"),
         authTag: authTag.toString("hex"),
         salt: salt,
         replicas: replicas,
       });
-
-      return res.status(201).json({
+      // Ghi log upload
+      await auditRepo.record(
+        userId,
+        "UPLOAD",
+        `Đã tải lên file: ${originalname}`,
+      );
+      res.status(201).json({
         success: true,
-        message: "Tải lên file thành công",
-        data: {
-          fileId: fileData.fileId,
-          fileName: fileData.originalFileName,
-          fileSize: fileData.fileSize,
-          uploadTime: fileData.uploadTime,
-          replicas: fileData.replicas,
-        },
+        message: "Upload và mã hóa thành công!",
+        data: newFile,
       });
     } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: "Lỗi upload file: " + error.message,
-      });
+      res.status(500).json({ success: false, message: error.message });
     }
   },
 
-  // Danh sách file
   listFiles: async (req, res) => {
     try {
       const userId = req.user.userId;
-
-      const userFiles = await fileRepo.findByOwnerId(userId);
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          files: userFiles.map((f) => ({
-            fileId: f.fileId,
-            fileName: f.originalFileName,
-            fileType: f.fileType,
-            fileSize: f.fileSize,
-            uploadTime: f.uploadTime,
-          })),
-          total: userFiles.length,
-        },
-      });
+      const files = await fileRepo.findByOwnerId(userId); // Gọi từ SQLite
+      res.status(200).json({ success: true, data: { files } });
     } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: "Lỗi lấy danh sách file: " + error.message,
-      });
+      res.status(500).json({ success: false, message: error.message });
     }
   },
 
-  // Download file
   download: async (req, res) => {
     try {
-      const userId = req.user.userId;
-      const { id: fileId } = req.params;
+      const { id } = req.params;
       const { password } = req.body;
+      const userId = req.user.userId;
 
-      if (!password) {
-        return res.status(400).json({
-          success: false,
-          message: "Vui lòng nhập mật khẩu để giải mã file",
-        });
+      // 1. Tìm metadata trong SQLite
+      const file = await fileRepo.findById(id);
+      if (!file || file.ownerId !== userId) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Không tìm thấy file" });
       }
 
-      // Tìm file
-      const file = await fileRepo.findById(parseInt(fileId));
-      if (!file) {
-        return res.status(404).json({
-          success: false,
-          message: "File không tồn tại",
-        });
-      }
+      console.log("🔍 Đang giải mã file:", file.originalFileName);
 
-      // Kiểm tra quyền sở hữu
-      if (file.ownerId !== userId) {
-        return res.status(403).json({
-          success: false,
-          message: "Bạn không có quyền tải file này",
-        });
-      }
-
-      // Đọc file mã hóa từ storage
+      // 2. Đọc file đã mã hóa từ các node
       const cipherBuffer = await storageService.readEncryptedFile(
-        fileId,
+        file.encryptedHash,
         file.replicas,
       );
 
-      // Derive key
-      const key = await cryptoService.deriveKey(password, file.salt);
+      // 3. Tạo lại khóa giải mã (Key) từ password và salt (phải khớp hoàn toàn lúc upload)
+      const key = await cryptoService.deriveKey(password, file.salt); // file.salt lấy từ SQLite
+      const ivBuffer = Buffer.from(file.iv, "hex");
+      const authTagBuffer = Buffer.from(file.authTag, "hex");
 
-      // Giải mã file
-      const iv = Buffer.from(file.iv, "hex");
-      const authTag = Buffer.from(file.authTag, "hex");
       const plainBuffer = cryptoService.decryptFile(
         cipherBuffer,
         key,
-        iv,
-        authTag,
+        ivBuffer,
+        authTagBuffer,
       );
 
-      // Gửi file về client
+      // 5. Trả file về cho trình duyệt
       res.setHeader("Content-Type", file.fileType);
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="${file.originalFileName}"`,
+        `attachment; filename="${encodeURIComponent(file.originalFileName)}"`,
       );
-      res.send(plainBuffer);
+      return res.send(plainBuffer);
+      // Ghi log download
+      await auditRepo.record(
+        userId,
+        "DOWNLOAD",
+        `Tải xuống file: ${file.originalFileName}`,
+      );
     } catch (error) {
-      return res.status(500).json({
+      console.error("🔥 Lỗi giải mã chi tiết:", error.message);
+      // Nếu lỗi là "Unsupported state...", nghĩa là mật khẩu sai (AuthTag không khớp)
+      res.status(400).json({
         success: false,
-        message: "Lỗi download file: " + error.message,
+        message: "Mật khẩu không đúng hoặc tệp tin đã bị hư hỏng.",
       });
+      await auditRepo.record(
+        userId,
+        "FAILED_DECRYPT",
+        `Thử giải mã file ${id} thất bại (Sai mật khẩu)`,
+      );
     }
   },
 };
