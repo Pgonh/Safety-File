@@ -1,24 +1,31 @@
-node_modules/
-.env
-.env.local
-npm-debug.log
-.DS_Store
-Thumbs.db
-
-# Bỏ qua file database SQLite
-backend/data/safety_file.db
-
-# Bỏ qua tất cả các file mã hóa trong các node lưu trữ
-backend/storage/node*/**/*.enc
-backend/storage/node*/**/*.evc
-
-# Bỏ qua các thư viện cài đặt (rất quan trọng)
+# Bỏ qua các thư viện node_modules
 node_modules/
 backend/node_modules/
 frontend/node_modules/
 
 # Bỏ qua các file môi trường nhạy cảm
 .env
+.env.local
 
-# Bỏ qua các file cấu hình riêng của VS Code
+# Bỏ qua các file log
+npm-debug.log
+yarn-error.log
+
+# Bỏ qua các file hệ thống
+.DS_Store
+Thumbs.db
 .vscode/
+
+# Bỏ qua file database SQLite
+backend/data/*.db
+
+# Bỏ qua tất cả các file mã hóa trong các node lưu trữ
+backend/storage/node1/files/
+backend/storage/node2/files/
+backend/storage/node3/files/
+backend/storage/node4/files/
+backend/storage/node5/files/
+
+# Bỏ qua các file lock
+package-lock.json
+yarn.lock
